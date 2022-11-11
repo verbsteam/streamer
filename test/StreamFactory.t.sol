@@ -62,7 +62,13 @@ contract StreamFactoryTest is Test {
         uint256 tokenAmount = 999975024000; // ~1M * 1e6
 
         address predictedAddress = factory.predictStreamAddress(
-            address(this), recipient, tokenAmount, address(token), startTime, stopTime
+            address(this),
+            address(this),
+            recipient,
+            tokenAmount,
+            address(token),
+            startTime,
+            stopTime
         );
 
         // Proposal would do these txs
@@ -84,7 +90,7 @@ contract StreamFactoryTest is Test {
         uint256 tokenAmount = 999975024000;
         address payer = address(0x4242);
         address predictedStream = factory.predictStreamAddress(
-            address(this), recipient, tokenAmount, address(token), startTime, stopTime
+            address(this), payer, recipient, tokenAmount, address(token), startTime, stopTime
         );
 
         vm.expectEmit(true, true, true, true);
@@ -118,7 +124,7 @@ contract StreamFactoryTest is Test {
         address frontrunner = address(0x1234);
 
         address predictedStream = factory.predictStreamAddress(
-            frontrunner, recipient, tokenAmount, address(token), startTime, stopTime
+            frontrunner, honestSender, recipient, tokenAmount, address(token), startTime, stopTime
         );
         vm.expectEmit(true, true, true, true);
         emit StreamCreated(
@@ -136,7 +142,7 @@ contract StreamFactoryTest is Test {
         );
 
         predictedStream = factory.predictStreamAddress(
-            honestSender, recipient, tokenAmount, address(token), startTime, stopTime
+            honestSender, honestSender, recipient, tokenAmount, address(token), startTime, stopTime
         );
         vm.expectEmit(true, true, true, true);
         emit StreamCreated(

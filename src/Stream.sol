@@ -8,6 +8,7 @@ import { IERC20 } from "openzeppelin-contracts/interfaces/IERC20.sol";
 import { SafeERC20 } from "openzeppelin-contracts/token/ERC20/utils/SafeERC20.sol";
 import { Math } from "openzeppelin-contracts/utils/math/Math.sol";
 import { IStream } from "./IStream.sol";
+import { Clone } from "clones-with-immutable-args/Clone.sol";
 
 /**
  * @title Stream
@@ -16,7 +17,7 @@ import { IStream } from "./IStream.sol";
  * Either party can choose to cancel, in which case the stream distributes each party's fair share of tokens.
  * @dev A fork of Sablier https://github.com/sablierhq/sablier/blob/%40sablier/protocol%401.1.0/packages/protocol/contracts/Sablier.sol
  */
-contract Stream is IStream, Initializable, ReentrancyGuard {
+contract Stream is IStream, Clone, ReentrancyGuard {
     using SafeERC20 for IERC20;
 
     /**
@@ -66,14 +67,42 @@ contract Stream is IStream, Initializable, ReentrancyGuard {
      * ░░░░░░░░░░░░░░░░░░░░░░░░░░░░░
      */
 
-    uint256 public tokenAmount;
-    uint256 public remainingBalance;
-    uint256 public ratePerSecond;
-    uint256 public startTime;
-    uint256 public stopTime;
-    address public recipient;
-    address public payer;
-    address public tokenAddress;
+    uint256 public amountWithdrawn;
+
+    /**
+     * ░░░░░░░░░░░░░░░░░░░░░░░░░░░░░
+     *   IMMUTABLES
+     * ░░░░░░░░░░░░░░░░░░░░░░░░░░░░░
+     */
+
+    function payer() public pure returns (address) {
+        return _getArgAddress(0);
+    }
+
+    function recipient() public pure returns (address) {
+        return _getArgAddress(20);
+    }
+
+    function tokenAmount() public pure returns (uint256) {
+        return _getArgUint256(40);
+    }
+
+    function tokenAddress() public pure returns (address) {
+        return _getArgAddress(72);
+    }
+
+    function startTime() public pure returns (uint256) {
+        return _getArgUint256(92);
+    }
+
+    function stopTime() public pure returns (uint256) {
+        return _getArgUint256(124);
+    }
+
+    function ratePerSecond() public pure returns (uint256) {
+        uint256 duration = stopTime() - startTime();
+        return tokenAmount() / duration;
+    }
 
     /**
      * ░░░░░░░░░░░░░░░░░░░░░░░░░░░░░
@@ -85,49 +114,14 @@ contract Stream is IStream, Initializable, ReentrancyGuard {
      * @dev Reverts if the caller is not the payer or the recipient of the stream.
      */
     modifier onlyPayerOrRecipient() {
-        if (msg.sender != recipient && msg.sender != payer) {
+        if (msg.sender != recipient() && msg.sender != payer()) {
             revert CallerNotPayerOrRecipient();
         }
 
         _;
     }
 
-    /**
-     * ░░░░░░░░░░░░░░░░░░░░░░░░░░░░░
-     *   INITIALIZER
-     * ░░░░░░░░░░░░░░░░░░░░░░░░░░░░░
-     */
-
-    function initialize(
-        address _payer,
-        address _recipient,
-        uint256 _tokenAmount,
-        address _tokenAddress,
-        uint256 _startTime,
-        uint256 _stopTime
-    ) public initializer {
-        if (_payer == address(0)) revert PayerIsAddressZero();
-        if (_recipient == address(0)) revert RecipientIsAddressZero();
-        if (_recipient == address(this)) revert RecipientIsStreamContract();
-        if (_tokenAmount == 0) revert TokenAmountIsZero();
-        if (_stopTime <= _startTime) revert DurationMustBePositive();
-
-        uint256 duration = _stopTime - _startTime;
-
-        if (_tokenAmount < duration) revert TokenAmountLessThanDuration();
-        if (_tokenAmount % duration != 0) revert TokenAmountNotMultipleOfDuration();
-
-        remainingBalance = _tokenAmount;
-        tokenAmount = _tokenAmount;
-        ratePerSecond = _tokenAmount / duration;
-        recipient = _recipient;
-        payer = _payer;
-        startTime = _startTime;
-        stopTime = _stopTime;
-        tokenAddress = _tokenAddress;
-
-        emit StreamCreated(payer, recipient, tokenAmount, tokenAddress, startTime, stopTime);
-    }
+    // TODO the initializer checks were removed, so they should be probably performed in StreamFactory?
 
     /**
      * ░░░░░░░░░░░░░░░░░░░░░░░░░░░░░
@@ -143,14 +137,14 @@ contract Stream is IStream, Initializable, ReentrancyGuard {
      */
     function withdraw(uint256 amount) external nonReentrant onlyPayerOrRecipient {
         if (amount == 0) revert CantWithdrawZero();
-        address recipient_ = recipient;
+        address recipient_ = recipient();
 
         uint256 balance = balanceOf(recipient_);
         if (balance < amount) revert AmountExceedsBalance();
 
-        remainingBalance = remainingBalance - amount;
+        amountWithdrawn += amount;
 
-        IERC20(tokenAddress).safeTransfer(recipient_, amount);
+        IERC20(tokenAddress()).safeTransfer(recipient_, amount);
         emit TokensWithdrawn(recipient_, amount);
     }
 
@@ -162,9 +156,9 @@ contract Stream is IStream, Initializable, ReentrancyGuard {
      * Only this stream's payer or recipient can call this function.
      */
     function cancel() external nonReentrant onlyPayerOrRecipient {
-        address payer_ = payer;
-        address recipient_ = recipient;
-        IERC20 token = IERC20(tokenAddress);
+        address payer_ = payer();
+        address recipient_ = recipient();
+        IERC20 token = IERC20(tokenAddress());
 
         uint256 recipientBalance = balanceOf(recipient_);
         if (recipientBalance > 0) token.safeTransfer(recipient_, recipientBalance);
@@ -189,9 +183,9 @@ contract Stream is IStream, Initializable, ReentrancyGuard {
      * @return uint256 The total funds allocated to `who` as uint256.
      */
     function balanceOf(address who) public view returns (uint256) {
-        uint256 tokenAmount_ = tokenAmount;
-        uint256 remainingBalance_ = remainingBalance;
-        uint256 recipientBalance = elapsedTime() * ratePerSecond;
+        uint256 tokenAmount_ = tokenAmount();
+        uint256 remainingBalance_ = remainingBalance();
+        uint256 recipientBalance = elapsedTime() * ratePerSecond();
 
         // Take withdrawals into account
         if (tokenAmount_ > remainingBalance_) {
@@ -199,8 +193,8 @@ contract Stream is IStream, Initializable, ReentrancyGuard {
             recipientBalance -= withdrawalAmount;
         }
 
-        if (who == recipient) return recipientBalance;
-        if (who == payer) {
+        if (who == recipient()) return recipientBalance;
+        if (who == payer()) {
             return remainingBalance_ - recipientBalance;
         }
         return 0;
@@ -210,9 +204,9 @@ contract Stream is IStream, Initializable, ReentrancyGuard {
      * @notice Returns the time elapsed in this stream, or zero if it hasn't started yet.
      */
     function elapsedTime() public view returns (uint256) {
-        if (block.timestamp <= startTime) return 0;
-        if (block.timestamp < stopTime) return block.timestamp - startTime;
-        return stopTime - startTime;
+        if (block.timestamp <= startTime()) return 0;
+        if (block.timestamp < stopTime()) return block.timestamp - startTime();
+        return stopTime() - startTime();
     }
 
     /**
@@ -220,7 +214,7 @@ contract Stream is IStream, Initializable, ReentrancyGuard {
      * to recipient.
      */
     function tokenAndOutstandingBalance() public view returns (uint256, uint256) {
-        return (tokenBalance(), remainingBalance);
+        return (tokenBalance(), remainingBalance());
     }
 
     /**
@@ -233,6 +227,10 @@ contract Stream is IStream, Initializable, ReentrancyGuard {
      * @dev Helper function that makes the rest of the code look nicer.
      */
     function tokenBalance() internal view returns (uint256) {
-        return IERC20(tokenAddress).balanceOf(address(this));
+        return IERC20(tokenAddress()).balanceOf(address(this));
+    }
+
+    function remainingBalance() internal view returns (uint256) {
+        return tokenAmount() - amountWithdrawn;
     }
 }

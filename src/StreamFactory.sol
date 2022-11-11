@@ -2,7 +2,7 @@
 
 pragma solidity ^0.8.17;
 
-import { Clones } from "openzeppelin-contracts/proxy/Clones.sol";
+import { ClonesWithImmutableArgs } from "clones-with-immutable-args/ClonesWithImmutableArgs.sol";
 import { IStream } from "./IStream.sol";
 
 /**
@@ -10,6 +10,8 @@ import { IStream } from "./IStream.sol";
  * @notice Creates minimal clones of `Stream`.
  */
 contract StreamFactory {
+    using ClonesWithImmutableArgs for address;
+
     /**
      * ░░░░░░░░░░░░░░░░░░░░░░░░░░░░░
      *   EVENTS
@@ -79,8 +81,11 @@ contract StreamFactory {
         bytes32 salt = keccak256(
             abi.encodePacked(msg.sender, recipient, tokenAmount, tokenAddress, startTime, stopTime)
         );
-        stream = Clones.cloneDeterministic(streamImplementation, salt);
-        IStream(stream).initialize(payer, recipient, tokenAmount, tokenAddress, startTime, stopTime);
+
+        bytes memory data =
+            abi.encodePacked(payer, recipient, tokenAmount, tokenAddress, startTime, stopTime);
+
+        stream = streamImplementation.cloneDeterministic(salt, data);
 
         emit StreamCreated(payer, recipient, tokenAmount, tokenAddress, startTime, stopTime, stream);
     }
@@ -90,6 +95,7 @@ contract StreamFactory {
      */
     function predictStreamAddress(
         address msgSender,
+        address payer,
         address recipient,
         uint256 tokenAmount,
         address tokenAddress,
@@ -99,6 +105,12 @@ contract StreamFactory {
         bytes32 salt = keccak256(
             abi.encodePacked(msgSender, recipient, tokenAmount, tokenAddress, startTime, stopTime)
         );
-        return Clones.predictDeterministicAddress(streamImplementation, salt);
+
+        bytes memory data =
+            abi.encodePacked(payer, recipient, tokenAmount, tokenAddress, startTime, stopTime);
+
+        (address predicted, bool exists) =
+            streamImplementation.predictDeterministicAddress(salt, data);
+        return predicted;
     }
 }
