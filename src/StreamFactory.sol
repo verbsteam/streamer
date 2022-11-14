@@ -2,7 +2,7 @@
 
 pragma solidity ^0.8.17;
 
-import { ClonesWithImmutableArgs } from "clones-with-immutable-args/ClonesWithImmutableArgs.sol";
+import { LibClone } from "solady/utils/LibClone.sol";
 import { IStream } from "./IStream.sol";
 
 /**
@@ -10,7 +10,7 @@ import { IStream } from "./IStream.sol";
  * @notice Creates minimal clones of `Stream`.
  */
 contract StreamFactory {
-    using ClonesWithImmutableArgs for address;
+    using LibClone for address;
 
     /**
      * ░░░░░░░░░░░░░░░░░░░░░░░░░░░░░
@@ -85,7 +85,7 @@ contract StreamFactory {
         bytes memory data =
             abi.encodePacked(payer, recipient, tokenAmount, tokenAddress, startTime, stopTime);
 
-        stream = streamImplementation.cloneDeterministic(salt, data);
+        stream = streamImplementation.cloneDeterministic(data, salt);
 
         emit StreamCreated(payer, recipient, tokenAmount, tokenAddress, startTime, stopTime, stream);
     }
@@ -109,8 +109,6 @@ contract StreamFactory {
         bytes memory data =
             abi.encodePacked(payer, recipient, tokenAmount, tokenAddress, startTime, stopTime);
 
-        (address predicted, bool exists) =
-            streamImplementation.predictDeterministicAddress(salt, data);
-        return predicted;
+        return streamImplementation.predictDeterministicAddress(data, salt, address(this));
     }
 }
