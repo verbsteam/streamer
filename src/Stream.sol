@@ -199,6 +199,7 @@ contract Stream is IStream, Initializable, ReentrancyGuard {
      * @notice Returns the time elapsed in this stream, or zero if it hasn't started yet.
      */
     function elapsedTime() public view returns (uint256) {
+        // CR: gas: cache storage variables
         if (block.timestamp <= startTime) return 0;
         if (block.timestamp < stopTime) return block.timestamp - startTime;
         return stopTime - startTime;

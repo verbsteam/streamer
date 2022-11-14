@@ -77,6 +77,7 @@ contract StreamFactory {
         uint256 stopTime
     ) public returns (address stream) {
         bytes32 salt = keccak256(
+            // CR: consider adding `payer` into the salt
             abi.encodePacked(msg.sender, recipient, tokenAmount, tokenAddress, startTime, stopTime)
         );
         stream = Clones.cloneDeterministic(streamImplementation, salt);
