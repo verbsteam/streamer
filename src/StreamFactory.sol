@@ -7,6 +7,7 @@ import { IERC20 } from "openzeppelin-contracts/interfaces/IERC20.sol";
 import { SafeERC20 } from "openzeppelin-contracts/token/ERC20/utils/SafeERC20.sol";
 import { LibClone } from "solady/utils/LibClone.sol";
 
+// CR: I think it's worth including some docs on *why* we decided to create a factory of clines, i.e to be able to fund it at a later time
 /**
  * @title Stream Factory
  * @notice Creates minimal clones of `Stream`.
@@ -51,8 +52,9 @@ contract StreamFactory {
      * ░░░░░░░░░░░░░░░░░░░░░░░░░░░░░
      */
 
-    address immutable streamImplementation;
+    address public immutable streamImplementation;
 
+    // CR: add natspec
     constructor(address streamImplementation_) {
         streamImplementation = streamImplementation_;
     }
@@ -69,8 +71,8 @@ contract StreamFactory {
      * @param recipient the recipient of the stream.
      * @param tokenAmount the total token amount payer is streaming to recipient.
      * @param tokenAddress the contract address of the payment token.
-     * @param startTime the stream start timestamp in seconds.
-     * @param stopTime the stream end timestamp in seconds.
+     * @param startTime the unix timestamp for when the stream starts.
+     * @param stopTime the unix timestamp for when the stream ends.
      * @return stream the address of the new stream contract.
      */
     function createStream(
@@ -80,7 +82,11 @@ contract StreamFactory {
         uint256 startTime,
         uint256 stopTime
     ) public returns (address stream) {
-        return createStream(msg.sender, recipient, tokenAmount, tokenAddress, startTime, stopTime);
+        // CR: I suggest reducing the amount of indirection, let's immediately call the function that does the work.
+        // there's a bit of repition in the "default" params, but I think it's easier to follow
+        // It also allows changing some of the functions to be `external` for a bit of gas saving
+        return
+            createStream(msg.sender, recipient, tokenAmount, tokenAddress, startTime, stopTime, 0);
     }
 
     /**
@@ -91,8 +97,8 @@ contract StreamFactory {
      * @param recipient the recipient of the stream.
      * @param tokenAmount the total token amount payer is streaming to recipient.
      * @param tokenAddress the contract address of the payment token.
-     * @param startTime the stream start timestamp in seconds.
-     * @param stopTime the stream end timestamp in seconds.
+     * @param startTime the unix timestamp for when the stream starts.
+     * @param stopTime the unix timestamp for when the stream ends.
      * @return stream the address of the new stream contract.
      */
     function createAndFundStream(
@@ -101,7 +107,8 @@ contract StreamFactory {
         address tokenAddress,
         uint256 startTime,
         uint256 stopTime
-    ) public returns (address stream) {
+    ) external returns (address stream) {
+        // CR: same here, let's call the "internal" callStream immediately
         stream = createStream(recipient, tokenAmount, tokenAddress, startTime, stopTime);
         IERC20(tokenAddress).safeTransferFrom(msg.sender, stream, tokenAmount);
     }
@@ -112,8 +119,8 @@ contract StreamFactory {
      * @param recipient the recipient of the stream.
      * @param tokenAmount the total token amount payer is streaming to recipient.
      * @param tokenAddress the contract address of the payment token.
-     * @param startTime the stream start timestamp in seconds.
-     * @param stopTime the stream end timestamp in seconds.
+     * @param startTime the unix timestamp for when the stream starts.
+     * @param stopTime the unix timestamp for when the stream ends.
      * @return stream the address of the new stream contract.
      */
     function createStream(
@@ -137,8 +144,8 @@ contract StreamFactory {
      * @param recipient the recipient of the stream.
      * @param tokenAmount the total token amount payer is streaming to recipient.
      * @param tokenAddress the contract address of the payment token.
-     * @param startTime the stream start timestamp in seconds.
-     * @param stopTime the stream end timestamp in seconds.
+     * @param startTime the unix timestamp for when the stream starts.
+     * @param stopTime the unix timestamp for when the stream ends.
      * @param nonce the nonce for this stream creation.
      * @return stream the address of the new stream contract.
      */
@@ -241,6 +248,7 @@ contract StreamFactory {
      * @dev Encodes Stream's immutable arguments, as expected by LibClone, and in the order `Stream` uses to read
      * their values. Any change here should result in a change in how `Stream` reads these arguments.
      */
+    // CR: I think this function can be inlined. don't see much value in extracting it.
     function encodeData(
         address payer,
         address recipient,
