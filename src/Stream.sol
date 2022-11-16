@@ -142,6 +142,7 @@ contract Stream is IStream, Clone {
      * This approach warms up this slot upon stream creation, so that withdrawals cost less gas.
      * If this were the sum of withdrawals, recipient would pay 20K extra gas on their first withdrawal.
      */
+    // CR: maybe add to natpsec: this should be equal to this contract's ERC20 token's balance once the contract has been fully funded
     uint256 public remainingBalance;
 
     /**
@@ -173,7 +174,7 @@ contract Stream is IStream, Clone {
      * This does create the possibility for the factory to initialize the same stream twice; this risk seems low
      * and worth the gas savings.
      */
-    function initialize() public {
+    function initialize() external {
         if (msg.sender != factory()) revert OnlyFactory();
 
         remainingBalance = tokenAmount();
